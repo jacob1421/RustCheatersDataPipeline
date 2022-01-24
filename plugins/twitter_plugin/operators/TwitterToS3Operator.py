@@ -26,8 +26,7 @@ class TwitterToS3Operator(BaseOperator):
     def format_time_twitter_ISO8601(self, str_time):
         import pendulum
         dt = pendulum.parse(str_time)
-        print(dt)
-        print("%04i-%02i-%02iT%02i:%02i:%02iZ" % (dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second))
+        print("DATE TIME: %s" % dt)
         return ("%04i-%02i-%02iT%02i:%02i:%02iZ" % (dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second))
 
     def execute(self, context):
@@ -61,7 +60,7 @@ class TwitterToS3Operator(BaseOperator):
                     raise AirflowException("Response check returned False.")
 
             if self.log_response:
-                self.log.info("Request URL: %s\nRequest Response Text: %s\n" % (response.url, response.text))
+                self.log.info("\nRequest URL: %s\nRequest Response Text: %s\n" % (response.url, response.text))
 
             response_json = response.json()
 
@@ -90,11 +89,13 @@ class TwitterToS3Operator(BaseOperator):
 
         if banned_players_found:
             if self.log_response:
-                self.log.info("Saving Data To %s" % self.key)
+                self.log.info("SAVING DATA TO\nBucket: %s\nKey: %s\n" % (self.bucket_name,self.key))
             s3_hook = S3Hook(aws_conn_id=self.aws_conn_id)
             s3_hook.load_string(
                 bucket_name=self.bucket_name,
                 string_data=json.dumps(responses, indent=4),
                 key=self.key
             )
+
+            return self.key
 
