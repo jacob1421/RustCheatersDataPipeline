@@ -7,16 +7,16 @@ from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 import time
 
 class SteamToS3Operator(BaseOperator):
-    template_fields = ['request_params', 'load_key', 'save_key']
+    template_fields = ['request_params', 'bucket_load_key', 'bucket_save_key']
 
-    def __init__(self, bucket_name, load_key, save_key, aws_conn_id, endpoint, http_conn_id, request_params, headers, log_response=False, **kwargs):
+    def __init__(self, bucket_name, bucket_load_key, bucket_save_key, aws_conn_id, endpoint, http_conn_id, request_params, headers, log_response=False, **kwargs):
         super().__init__(**kwargs)
         self.http_conn_id = http_conn_id
         self.log_response = log_response
         self.endpoint = endpoint
         self.bucket_name = bucket_name
-        self.load_key = load_key
-        self.save_key = save_key
+        self.bucket_load_key = bucket_load_key
+        self.bucket_save_key = bucket_save_key
         self.aws_conn_id = aws_conn_id
         self.request_params = request_params or {}
         self.headers = headers or {}
@@ -37,8 +37,8 @@ class SteamToS3Operator(BaseOperator):
             #Append response results
             responses["responses"].append(r_json)
 
-            # API Rate Limit 1 request per second
-            time.sleep(1)
+            # API Rate Limit 1 request per 0.5 second
+            time.sleep(0.5)
 
         if len(responses["responses"]) > 0:
             return responses
@@ -48,8 +48,8 @@ class SteamToS3Operator(BaseOperator):
         vanity_id = steam_vanity_url.split("https://steamcommunity.com/id/")[1].replace("/", "")
         response = http.run(endpoint="ISteamUser/ResolveVanityURL/v0001/",
                             data={"key": self.request_params["key"], "vanityurl": vanity_id}, headers=self.headers)
-        # API Rate Limit 1 request per second
-        time.sleep(1)
+        # API Rate Limit 1 request per 0.5 second
+        time.sleep(0.5)
         if self.log_response:
             self.log.info(response.text)
         if "steamid" in response.text:
@@ -61,7 +61,7 @@ class SteamToS3Operator(BaseOperator):
         if steam_ids is None:
             response = http.run(endpoint=self.endpoint, data=self.request_params, headers=self.headers)
             responses["responses"].append(response.json())
-            time.sleep(1)
+            time.sleep(0.5)
         else:
             for steam_id in steam_ids:
                 #Some apis return a 401 status code with the response when you try to access data in a private account
@@ -69,19 +69,23 @@ class SteamToS3Operator(BaseOperator):
                     self.request_params["steamid"] = steam_id
                     response = http.run(endpoint=self.endpoint, data=self.request_params, headers=self.headers)
                     #steam_id of incoming steam_id as key and response
+                    r_json = response.json()
+                    #Not all api calls return the associated steam id
+                    r_json["queried_steam_id"] = str(steam_id)
                     responses["responses"].append(
-                        {
-                            str(steam_id): response.json()
-                        }
+                        r_json
                     )
                 except Exception as e:
                     #https://partner.steamgames.com/doc/webapi_overview/responses
+                    #This approach is taken since the API will say a profile is private when its not fully private. You cant
+                    #actually tell if the profile is fully private or just pieces of the profile are private.
                     if "429" in str(e):
+                        #To Many Requests
                         raise e
                     else:
                         pass
 
-                time.sleep(1)
+                time.sleep(0.5)
 
         if len(responses["responses"]) > 0:
             return responses
@@ -94,7 +98,7 @@ class SteamToS3Operator(BaseOperator):
                 break
 
     def execute(self, context):
-        if self.load_key == "None":
+        if self.bucket_load_key == "None":
             return None
 
         #Make sure key is in requests params
@@ -121,20 +125,19 @@ class SteamToS3Operator(BaseOperator):
             #Get S3 Profile Data
             hook = S3Hook(aws_conn_id=self.aws_conn_id)
             file_content = hook.read_key(
-                key=self.load_key, bucket_name=self.bucket_name
+                key=self.bucket_load_key, bucket_name=self.bucket_name
             )
             profiles_data = json.loads(file_content)
 
             #Get steams id from profile data
             steam_ids = []
-            for profile_url in profiles_data["profile_urls"]:
+            for profile_url in profiles_data["steam_profile_urls"]:
                 # Get steam_id
-                steam_id = None
-                if self.is_vanity_url(profile_url):
+                if self.is_vanity_url(profile_url["profile_url"]):
                     # Get the profile id from vanity
-                    steam_id = self.resolve_vanity_url(http, profile_url)
+                    steam_id = self.resolve_vanity_url(http, profile_url["profile_url"])
                 else:
-                    steam_id = profile_url.split("http://steamcommunity.com/profiles/")[1]
+                    steam_id = profile_url["profile_url"].split("http://steamcommunity.com/profiles/")[1]
 
                 # steam_id can be None if vanity fails to resolve
                 if steam_id is None:
@@ -163,15 +166,22 @@ class SteamToS3Operator(BaseOperator):
                 self.log.info("NO DATA TO SAVE")
             return
 
+        file_name = ("%s_to_%s" % (context["data_interval_start"].strftime("%Y-%m-%dT%H_%M_%SZ"),
+                                   context["data_interval_end"].strftime("%Y-%m-%dT%H_%M_%SZ")))
+
+        s3_bucket_save_key = ("%s%s%s%s" % (self.bucket_save_key,
+                                       ("%s/%s/%s/" % (context["ds"][0:4], context["ds"][5:7], context["ds"][8::])),
+                                       file_name, ".json"))
+
         if self.log_response:
-            self.log.info("SAVING RESPONSE DATA FROM ENDPOINT: %s\nTO\nBucket: %s\nKey: %s\n" % (self.endpoint, self.bucket_name, self.save_key))
+            self.log.info("SAVING RESPONSE DATA FROM ENDPOINT: %s\nTO\nBucket: %s\nKey: %s\n" % (self.endpoint, self.bucket_name, s3_bucket_save_key))
 
         #Save data
         s3_hook = S3Hook(aws_conn_id=self.aws_conn_id)
         s3_hook.load_string(
             bucket_name=self.bucket_name,
             string_data=json.dumps(response_data, indent=4),
-            key=self.save_key
+            key=s3_bucket_save_key
         )
 
-        return self.save_key
+        context["ti"].xcom_push(key="s3_bucket_key", value=s3_bucket_save_key)
