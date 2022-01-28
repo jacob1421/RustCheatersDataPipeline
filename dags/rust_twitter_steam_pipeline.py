@@ -11,7 +11,7 @@ from airflow.operators.python import BranchPythonOperator
 
 default_args = {
     "owner": "airflow",
-    "start_date": datetime(2022, 1, 26),
+    "start_date": datetime(2022, 1, 27),
     "retries": 1,
     "max_retry_delay": timedelta(minutes=5)
 }
@@ -20,7 +20,7 @@ def get_twitter_timeline(**kwargs):
     from datetime import datetime, timezone
     from tweepy import Paginator, Client
     import json
-    kwargs["data_interval_start"] = kwargs["data_interval_start"] - timedelta(hours=2)
+    kwargs["data_interval_start"] = kwargs["data_interval_start"]
     steam_profile_urls = {
         "steam_profile_urls": [],
         "debug": {
@@ -82,7 +82,7 @@ def check_timeline_data_exists(ti):
     return "twitter_data_file_sensor"
 
 
-with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), catchup=False, default_args=default_args, max_active_runs=1) as dag:
+with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), catchup=True, default_args=default_args, max_active_runs=1) as dag:
     extract_twitter_timeline_data = PythonOperator(
         task_id="extract_twitter_timeline_data",
         python_callable=get_twitter_timeline,
@@ -332,7 +332,7 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
             file_sensor = S3KeySensor(
                 aws_conn_id="s3",
                 task_id=sensor_task_id,
-                bucket_key=f"{{ ti.xcom_pull(key='s3_bucket_key', task_ids='extract_steam_data.{extract_data_task_id}') }}",
+                bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='extract_steam_data.%s') }}" % (extract_data_task_id),
                 bucket_name="rust-cheaters",
                 timeout=90,
                 soft_fail=True
