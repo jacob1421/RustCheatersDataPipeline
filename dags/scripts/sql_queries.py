@@ -51,7 +51,7 @@ class sql_queries:
        'steam_id, badge_id, app_id, community_item_id, xp, level, completion_time, scarcity, steam_level',
        '(FORMAT CSV, HEADER)',
        '{bucket}',
-       'data-lake/staged/steam/badges_fact/2022/02/04/2022-02-04T09_43_38Z_to_2022-02-04T10_43_38Z.csv',
+       '{bucket_key}',
        '{region}'
     );
         

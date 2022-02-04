@@ -23,7 +23,7 @@ default_args = {
     "max_retry_delay": timedelta(minutes=5)
 }
 
-with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), catchup=True, default_args=default_args, max_active_runs=1) as dag:
+with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), catchup=False, default_args=default_args, concurrency=3, max_active_runs=1) as dag:
     extract_twitter_timeline_data = PythonOperator(
         task_id="extract_twitter_timeline_data",
         python_callable=get_twitter_timeline,
