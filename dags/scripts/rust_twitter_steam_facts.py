@@ -1,6 +1,7 @@
 from scripts.helpers import get_json_object_s3, save_pandas_object_s3
 import json
 import pandas as pd
+from datetime import timedelta
 
 def transform_achievement_fact(**kwargs):
     # Log number records at start
@@ -137,7 +138,7 @@ def transform_bans_fact(**kwargs):
     df = pd.json_normalize(data["responses"], record_path=["players"])
 
     #Get the date of ban, instead of days since last ban
-    df["DaysSinceLastBan"] = df["DaysSinceLastBan"].map(lambda days_since_ban: date.today() - timedelta(days=days_since_ban))
+    df["DaysSinceLastBan"] = df["DaysSinceLastBan"].map(lambda days_since_ban: kwargs["data_interval_end"] - timedelta(days=days_since_ban))
 
     # Log number records at start
     print("Dataframe loaded with %i rows and %i columns" % (df.shape[0], df.shape[1]))
@@ -401,18 +402,21 @@ def transform_badges_fact(**kwargs):
     # Log number records at start
     print("Dataframe loaded with %i rows and %i columns" % (df.shape[0], df.shape[1]))
 
+    #Make sure these columns exist
+    for column in ["appid", "communityitemid"]:
+        if column not in df.columns:
+            df[column] = -1
+
     # Drop any records with NA badgeid
     df = df.dropna(axis="index", subset=["badgeid"])
+
+    #Nulls do not work for check constraints
+    df["appid"] = df["appid"].fillna(-1)
+    df["communityitemid"] = df["communityitemid"].fillna(-1)
 
     #Get date from unix time
     df['completion_time'] = pd.to_datetime(df['completion_time'], unit="s", errors="coerce", utc=True).dt.strftime(
         "%Y-%m-%d %H:%M:%S")
-
-    #Make sure the appid and communityitemid are in the columns
-    if "appid" not in df.columns:
-        df["appid"] = 0
-    if "communityitemid" not in df.columns:
-        df["communityitemid"] = 0
 
     # Rename columns
     df = df.rename(columns={
@@ -422,6 +426,18 @@ def transform_badges_fact(**kwargs):
         "appid": "app_id",
         "communityitemid": "community_item_id",
     })
+
+    # Correct datatypes for columns
+    df = df.astype({
+        "steam_id": "Int64",
+        "badge_id": "Int64",
+        "app_id": "Int64",
+        "community_item_id": "Int64",
+        "xp": "Int64",
+        "level": "Int64",
+        "scarcity": "Int64",
+        "steam_level": "Int64"
+    }, errors="ignore")
 
     # Data validation checks
     if df["steam_id"].isna().sum() > 0:

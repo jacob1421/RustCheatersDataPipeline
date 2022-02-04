@@ -1,6 +1,4 @@
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-import json
-from io import StringIO
 
 def get_twitter_timeline(**kwargs):
     from datetime import datetime, timezone
@@ -66,6 +64,7 @@ def check_timeline_data_exists(ti):
     return "twitter_data_file_sensor"
 
 def get_json_object_s3(aws_conn_id="", bucket_name="", key=""):
+    import json
     hook = S3Hook(aws_conn_id=aws_conn_id)
     file_content = hook.read_key(
         bucket_name=bucket_name,
@@ -75,12 +74,16 @@ def get_json_object_s3(aws_conn_id="", bucket_name="", key=""):
     return json_data
 
 def save_pandas_object_s3(aws_conn_id="", bucket_name="", key="", pd_data_frame=None):
+    import json
+    from io import StringIO
     if pd_data_frame is None:
         return None
 
     #Convert dataframe into in memory file object
     csv_buffer = StringIO()
     pd_data_frame.to_csv(csv_buffer, index=False)
+
+    print("Saving pandas object:\nAWS CONN ID:%s\nBUCKET: %s\nKEY: %s\n" % (aws_conn_id, bucket_name, key))
 
     # Save data
     s3_hook = S3Hook(aws_conn_id=aws_conn_id)

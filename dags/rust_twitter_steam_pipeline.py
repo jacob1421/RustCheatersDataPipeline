@@ -2,13 +2,17 @@ from datetime import datetime, timedelta
 from airflow.operators.python import PythonOperator
 from airflow.models import DAG
 from custom_operators.SteamToS3Operator import SteamToS3Operator
+from custom_operators.LoadDimsOperator import LoadDimsOperator
 from airflow.providers.amazon.aws.sensors.s3_key import S3KeySensor
 from airflow.utils.task_group import TaskGroup
 from airflow.operators.dummy import DummyOperator
 from airflow.operators.python import BranchPythonOperator
 from scripts.helpers import get_twitter_timeline, check_timeline_data_exists
-from scripts.rust_twitter_steam_dims import transform_achievement_dim, transform_badge_dim, transform_relationship_dim, transform_game_dim, transform_stats_dim, transform_group_dim, transform_player_dim, transform_friend_dim
-from scripts.rust_twitter_steam_facts import transform_stats_fact, transform_game_playing_banned_fact, transform_groups_fact, transform_game_playtime_fact, transform_bans_fact, transform_badges_fact, transform_friends_fact, transform_achievement_fact
+from scripts.rust_twitter_steam_dims import transform_achievement_dim, transform_badge_dim, transform_relationship_dim, \
+    transform_game_dim, transform_stats_dim, transform_group_dim, transform_player_dim, transform_friend_dim
+from scripts.rust_twitter_steam_facts import transform_stats_fact, transform_game_playing_banned_fact, \
+    transform_groups_fact, transform_game_playtime_fact, transform_bans_fact, transform_badges_fact, \
+    transform_friends_fact, transform_achievement_fact
 
 default_args = {
     "owner": "airflow",
@@ -17,7 +21,8 @@ default_args = {
     "max_retry_delay": timedelta(minutes=5)
 }
 
-with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), catchup=False, default_args=default_args, max_active_runs=1) as dag:
+with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), catchup=False, default_args=default_args,
+         max_active_runs=1) as dag:
     extract_twitter_timeline_data = PythonOperator(
         task_id="extract_twitter_timeline_data",
         python_callable=get_twitter_timeline,
@@ -28,7 +33,7 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
             "log_response": True
         },
         templates_dict={
-            "bucket_key": f"data-lake/raw/twitter/timeline/",
+            "bucket_key": "data-lake/raw/twitter/timeline/",
             "BEARER_TOKEN": "{{ var.value.TWITTER_BEARER_TOKEN }}"
         }
     )
@@ -205,7 +210,7 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
         player_associated_groups >> player_achievements >> player_stats >> player_owned_games >> player_badges
 
     with TaskGroup(group_id='transform_steam_data') as transform_steam_data:
-        #FILE SENSORS
+        # FILE SENSORS
         player_summaries_f_sensor = S3KeySensor(
             aws_conn_id="s3",
             task_id="player_summaries_f_sensor",
@@ -271,7 +276,7 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
             soft_fail=True
         )
 
-        #STAGE DIMS
+        # STAGE DIMS
         stage_achievements_dim = PythonOperator(
             task_id="stage_achievements_dim",
             python_callable=transform_achievement_dim,
@@ -386,7 +391,7 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
         player_owned_games_f_sensor >> stage_games_dim
         player_badges_f_sensor >> stage_badges_dim
 
-        #STAGE FACTS
+        # STAGE FACTS
         stage_achievements_fact = PythonOperator(
             task_id="stage_achievements_fact",
             python_callable=transform_achievement_fact,
@@ -508,7 +513,7 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
         player_badges_f_sensor >> stage_badges_fact
         player_bans_f_sensor >> stage_bans_fact
 
-    with TaskGroup(group_id='load_dims_steam_data') as load_steam_data:
+    with TaskGroup(group_id='load_dims_steam_data') as load_dims_steam_data:
         # FILE SENSORS
         achievements_dim_f_sensor = S3KeySensor(
             aws_conn_id="s3",
@@ -582,6 +587,221 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
             soft_fail=True
         )
 
+        # DIMS TO POSTGRESQL
+        load_achievements_dim = LoadDimsOperator(
+            task_id="load_achievements_dim",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            table="Achievements_Dim",
+            columns="name, description",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_achievements_dim') }}",
+            region="us-east-1",
+            conflict_columns="name",
+            conflict_action="NOTHING"
+        )
+
+        load_badges_dim = LoadDimsOperator(
+            task_id="load_badges_dim",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            table="Badges_Dim",
+            columns="badge_id, app_id, community_item_id, xp, level",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_badges_dim') }}",
+            region="us-east-1",
+            conflict_columns="badge_id,app_id,community_item_id,level",
+            conflict_action="NOTHING"
+        )
+
+        load_friend_dim = LoadDimsOperator(
+            task_id="load_friend_dim",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            table="Friend_Dim",
+            columns="steam_id",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_friend_dim') }}",
+            region="us-east-1",
+            conflict_columns="steam_id",
+            conflict_action="NOTHING"
+        )
+
+        load_game_dim = LoadDimsOperator(
+            task_id="load_game_dim",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            table="Game_Dim",
+            columns="game_id, name, has_community_visible_stats",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_games_dim') }}",
+            region="us-east-1",
+            conflict_columns="game_id",
+            conflict_action="NOTHING"
+        )
+
+        load_group_dim = LoadDimsOperator(
+            task_id="load_group_dim",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            table="Group_Dim",
+            columns="group_id",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_group_dim') }}",
+            region="us-east-1",
+            conflict_columns="group_id",
+            conflict_action="NOTHING"
+        )
+
+        load_player_dim = LoadDimsOperator(
+            task_id="load_player_dim",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            table="Player_Dim",
+            columns="steam_id, created_at, community_vis_state, profile_state, persona_name, avatar_hash, persona_state, comment_permission, real_name, primary_clan_id, loc_country_code, loc_state_code, loc_city_id",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_player_dim') }}",
+            region="us-east-1",
+            conflict_columns="steam_id",
+            conflict_action=""" --Update Profile
+                                UPDATE SET community_vis_state = EXCLUDED.community_vis_state,
+                                profile_state = EXCLUDED.profile_state,
+                                persona_name = EXCLUDED.persona_name,
+                                avatar_hash = EXCLUDED.avatar_hash,
+                                persona_state = EXCLUDED.persona_state,
+                                comment_permission = EXCLUDED.comment_permission,
+                                real_name = EXCLUDED.real_name,
+                                primary_clan_id = EXCLUDED.primary_clan_id,
+                                loc_country_code = EXCLUDED.loc_country_code,
+                                loc_state_code = EXCLUDED.loc_state_code,
+                                loc_city_id = EXCLUDED.loc_city_id"""
+        )
+
+        load_relationship_dim = LoadDimsOperator(
+            task_id="load_relationship_dim",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            table="Relationship_Dim",
+            columns="relationship",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_relationships_dim') }}",
+            region="us-east-1",
+            conflict_columns="relationship",
+            conflict_action="NOTHING"
+        )
+
+        load_stats_dim = LoadDimsOperator(
+            task_id="load_stats_dim",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            table="Stats_Dim",
+            columns="name",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_stats_dim') }}",
+            region="us-east-1",
+            conflict_columns="name",
+            conflict_action="NOTHING"
+        )
+
+        achievements_dim_f_sensor >> load_achievements_dim
+        group_dim_f_sensor >> load_group_dim
+        badges_dim_f_sensor >> load_badges_dim
+        friend_dim_f_sensor >> load_friend_dim
+        relationships_dim_f_sensor >> load_relationship_dim
+        games_dim_f_sensor >> load_game_dim
+        stats_dim_f_sensor >> load_stats_dim
+        player_dim_f_sensor >> load_player_dim
+
+    with TaskGroup(group_id='load_facts_steam_data') as load_facts_steam_data:
+        # FILE SENSORS
+        friends_fact_f_sensor = S3KeySensor(
+            aws_conn_id="s3",
+            task_id="friends_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_friends_fact') }}",
+            bucket_name="rust-cheaters",
+            timeout=90,
+            soft_fail=True
+        )
+        badges_fact_f_sensor = S3KeySensor(
+            aws_conn_id="s3",
+            task_id="badges_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='') }}",
+            bucket_name="rust-cheaters",
+            timeout=90,
+            soft_fail=True
+        )
+        bans_fact_f_sensor = S3KeySensor(
+            aws_conn_id="s3",
+            task_id="bans_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_badges_facts') }}",
+            bucket_name="rust-cheaters",
+            timeout=90,
+            soft_fail=True
+        )
+        game_playtime_fact_f_sensor = S3KeySensor(
+            aws_conn_id="s3",
+            task_id="game_playtime_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_game_playtime_fact') }}",
+            bucket_name="rust-cheaters",
+            timeout=90,
+            soft_fail=True
+        )
+        groups_fact_f_sensor = S3KeySensor(
+            aws_conn_id="s3",
+            task_id="groups_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_groups_fact') }}",
+            bucket_name="rust-cheaters",
+            timeout=90,
+            soft_fail=True
+        )
+        achievement_fact_f_sensor = S3KeySensor(
+            aws_conn_id="s3",
+            task_id="achievement_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_achievements_fact') }}",
+            bucket_name="rust-cheaters",
+            timeout=90,
+            soft_fail=True
+        )
+        game_playing_banned_fact_f_sensor = S3KeySensor(
+            aws_conn_id="s3",
+            task_id="game_playing_banned_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_game_playing_banned_fact') }}",
+            bucket_name="rust-cheaters",
+            timeout=90,
+            soft_fail=True
+        )
+        stats_fact_f_sensor = S3KeySensor(
+            aws_conn_id="s3",
+            task_id="stats_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_stats_fact') }}",
+            bucket_name="rust-cheaters",
+            timeout=90,
+            soft_fail=True
+        )
+
+        # # DIMS TO POSTGRESQL
+        # load_achievements_dim = LoadDimsOperator(
+        #     task_id="load_achievements_dim",
+        #     postgres_conn_id="aws_postgres",
+        #     database="data_warehouse",
+        #     schema="rust_data_warehouse",
+        #     table="Achievements_Dim",
+        #     columns="name, description",
+        #     bucket="rust-cheaters",
+        #     bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_achievements_dim') }}",
+        #     region="us-east-1",
+        #     conflict_columns="name",
+        #     conflict_action="NOTHING"
+        # )
+
     begin = DummyOperator(
         task_id="begin"
     )
@@ -591,6 +811,7 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
         trigger_rule="none_failed_min_one_success"
     )
 
-    begin >> extract_twitter_timeline_data >> timeline_data_exists_branch >> [no_accounts_exists_dummy_op, twitter_data_file_sensor]
-    twitter_data_file_sensor >> extract_steam_data >> transform_steam_data >> load_steam_data >> end
+    begin >> extract_twitter_timeline_data >> timeline_data_exists_branch >> [no_accounts_exists_dummy_op,
+                                                                              twitter_data_file_sensor]
+    twitter_data_file_sensor >> extract_steam_data >> transform_steam_data >> load_dims_steam_data >> load_facts_steam_data >> end
     no_accounts_exists_dummy_op >> end
