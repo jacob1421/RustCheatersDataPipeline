@@ -1,4 +1,4 @@
-class FactSql:
+class sql_queries:
     achievement_fact_insert = """
     --Create temp table for staged data
     CREATE TEMPORARY TABLE temp_fact (
@@ -19,15 +19,15 @@ class FactSql:
     );
     
     -- Insert data that does not exist in our dimension table
-    INSERT INTO rust_data_warehouse."Achievement_Fact"(player_sk, achievement_sk, game_sk, date_sk, time)
+    INSERT INTO {schema}."Achievement_Fact"(player_sk, achievement_sk, game_sk, date_sk, time)
     SELECT player_sk, achievement_sk, game_sk, date_sk, tf.unlock_ts::time WITH TIME ZONE as time  FROM temp_fact as tf
-    INNER JOIN rust_data_warehouse."Achievements_Dim" as ad
+    INNER JOIN {schema}."Achievements_Dim" as ad
         ON tf.name = ad.name
-    INNER JOIN rust_data_warehouse."Player_Dim" as pd
+    INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id
-    INNER JOIN rust_data_warehouse."Game_Dim" as gd
+    INNER JOIN {schema}."Game_Dim" as gd
         ON tf.game_name = gd.name
-    INNER JOIN rust_data_warehouse."Date_Dim" as dd
+    INNER JOIN {schema}."Date_Dim" as dd
         ON DATE(tf.unlock_ts) = dd.full_date;
     """
 
@@ -50,19 +50,19 @@ class FactSql:
        'temp_fact',
        'steam_id, badge_id, app_id, community_item_id, xp, level, completion_time, scarcity, steam_level',
        '(FORMAT CSV, HEADER)',
-       'rust-cheaters',
+       '{bucket}',
        'data-lake/staged/steam/badges_fact/2022/02/04/2022-02-04T09_43_38Z_to_2022-02-04T10_43_38Z.csv',
-       'us-east-1'
+       '{region}'
     );
         
     -- Insert data that does not exist in our dimension table
-    INSERT INTO rust_data_warehouse."Badges_Fact"(player_sk, badge_sk, date_sk, scarcity, steam_level, time)
+    INSERT INTO {schema}."Badges_Fact"(player_sk, badge_sk, date_sk, scarcity, steam_level, time)
     SELECT player_sk, badge_sk, date_sk, scarcity, steam_level, tf.completion_time::time WITH TIME ZONE as time FROM temp_fact as tf
-     INNER JOIN rust_data_warehouse."Badges_Dim" as bd
+     INNER JOIN {schema}."Badges_Dim" as bd
         ON tf.badge_id = bd.badge_id AND tf.app_id = bd.app_id AND tf.community_item_id = bd.community_item_id AND tf.xp = bd.xp AND tf.level = bd.level
-     INNER JOIN rust_data_warehouse."Player_Dim" as pd
+     INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id 
-     INNER JOIN rust_data_warehouse."Date_Dim" as dd
+     INNER JOIN {schema}."Date_Dim" as dd
         ON DATE(tf.completion_time) = dd.full_date;
     """
 
@@ -83,16 +83,16 @@ class FactSql:
        'temp_fact',
        'steam_id, last_ban_date, num_vac_bans, num_game_bans, community_banned, economy_ban, vac_banned',
        '(FORMAT CSV, HEADER)',
-       'rust-cheaters',
-       'data-lake/staged/steam/bans_fact/2022/02/04/2022-02-04T09_49_55Z_to_2022-02-04T10_49_55Z.csv',
-       'us-east-1'
+       '{bucket}',
+       '{bucket_key}',
+       '{region}'
     );
     
-    INSERT INTO rust_data_warehouse."Bans_Fact"(player_sk, date_sk, num_vac_bans, num_game_bans, community_banned, economy_ban, vac_banned)
+    INSERT INTO {schema}."Bans_Fact"(player_sk, date_sk, num_vac_bans, num_game_bans, community_banned, economy_ban, vac_banned)
     SELECT player_sk, date_sk, num_vac_bans, num_game_bans, community_banned, economy_ban, vac_banned FROM temp_fact as tf
-      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+      INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id 
-      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+      INNER JOIN {schema}."Date_Dim" as dd
         ON DATE(tf.last_ban_date) = dd.full_date;
     """
 
@@ -110,20 +110,20 @@ class FactSql:
        'temp_fact',
        'steam_id, friend_steam_id, friend_since, relationship',
        '(FORMAT CSV, HEADER)',
-       'rust-cheaters',
-       'data-lake/staged/steam/friends_fact/2022/02/04/2022-02-04T09_49_55Z_to_2022-02-04T10_49_55Z.csv',
-       'us-east-1'
+       '{bucket}',
+       '{bucket_key}',
+       '{region}'
     );
     
-    INSERT INTO rust_data_warehouse."Friends_Fact"(player_sk, player_friend_sk, date_sk, relationship_sk, time)
+    INSERT INTO {schema}."Friends_Fact"(player_sk, player_friend_sk, date_sk, relationship_sk, time)
     SELECT player_sk, friend_sk, date_sk, relationship_sk, tf.friend_since::time WITH TIME ZONE as time FROM temp_fact as tf
-      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+      INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id 
-      INNER JOIN rust_data_warehouse."Friend_Dim" as fd
+      INNER JOIN {schema}."Friend_Dim" as fd
         ON tf.friend_steam_id = fd.steam_id 
-      INNER JOIN rust_data_warehouse."Relationship_Dim" as rr
+      INNER JOIN {schema}."Relationship_Dim" as rr
         ON tf.relationship = rr.relationship
-      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+      INNER JOIN {schema}."Date_Dim" as dd
         ON DATE(tf.friend_since) = dd.full_date;
     """
 
@@ -140,18 +140,18 @@ class FactSql:
        'temp_fact',
        'steam_id, game_id, date',
        '(FORMAT CSV, HEADER)',
-       'rust-cheaters',
-       'data-lake/staged/steam/game_playing_banned_fact/2022/02/04/2022-02-04T09_43_38Z_to_2022-02-04T10_43_38Z.csv',
-       'us-east-1'
+       '{bucket}',
+       '{bucket_key}',
+       '{region}'
     );
     
-    INSERT INTO rust_data_warehouse."Game_Playing_Banned_Fact"(player_sk, game_sk, date_sk)
+    INSERT INTO {schema}."Game_Playing_Banned_Fact"(player_sk, game_sk, date_sk)
     SELECT player_sk, game_sk, date_sk FROM temp_fact as tf
-      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+      INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id 
-      INNER JOIN rust_data_warehouse."Game_Dim" as gd
+      INNER JOIN {schema}."Game_Dim" as gd
         ON tf.game_id = gd.game_id 
-      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+      INNER JOIN {schema}."Date_Dim" as dd
         ON DATE(tf.date) = dd.full_date;
     """
 
@@ -172,18 +172,18 @@ class FactSql:
        'temp_fact',
        'steam_id, game_id, date, playtime_windows_mins, playtime_mac_mins, playtime_linux_mins, playtime_two_weeks_mins',
        '(FORMAT CSV, HEADER)',
-       'rust-cheaters',
-       'data-lake/staged/steam/game_playtime_fact/2022/02/04/2022-02-04T10_28_36Z_to_2022-02-04T11_28_36Z.csv',
-       'us-east-1'
+       '{bucket}',
+       '{bucket_key}',
+       '{region}'
     );
     
-    INSERT INTO rust_data_warehouse."Game_Playtime_Fact"(player_sk, game_sk, date_sk, playtime_windows_mins, playtime_mac_mins, playtime_linux_mins, playtime_two_weeks)
+    INSERT INTO {schema}."Game_Playtime_Fact"(player_sk, game_sk, date_sk, playtime_windows_mins, playtime_mac_mins, playtime_linux_mins, playtime_two_weeks)
     SELECT player_sk, game_sk, date_sk, playtime_windows_mins, playtime_mac_mins, playtime_linux_mins, playtime_two_weeks_mins FROM temp_fact as tf
-      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+      INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id 
-      INNER JOIN rust_data_warehouse."Game_Dim" as gd
+      INNER JOIN {schema}."Game_Dim" as gd
         ON tf.game_id = gd.game_id 
-      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+      INNER JOIN {schema}."Date_Dim" as dd
         ON DATE(tf.date) = dd.full_date;
     """
 
@@ -200,18 +200,18 @@ class FactSql:
        'temp_fact',
        'steam_id, group_id, date',
        '(FORMAT CSV, HEADER)',
-       'rust-cheaters',
-       'data-lake/staged/steam/groups_fact/2022/02/04/2022-02-04T10_28_36Z_to_2022-02-04T11_28_36Z.csv',
-       'us-east-1'
+       '{bucket}',
+       '{bucket_key}',
+       '{region}'
     );
     
-    INSERT INTO rust_data_warehouse."Groups_Fact"(player_sk, group_sk, date_sk)
+    INSERT INTO {schema}."Groups_Fact"(player_sk, group_sk, date_sk)
     SELECT player_sk, group_sk, date_sk FROM temp_fact as tf
-      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+      INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id 
-      INNER JOIN rust_data_warehouse."Group_Dim" as gd
+      INNER JOIN {schema}."Group_Dim" as gd
         ON tf.group_id = gd.group_id
-      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+      INNER JOIN {schema}."Date_Dim" as dd
         ON DATE(tf.date) = dd.full_date;
     """
 
@@ -230,19 +230,19 @@ class FactSql:
        'temp_fact',
        'name, steam_id, game, date, value',
        '(FORMAT CSV, HEADER)',
-       'rust-cheaters',
-       'data-lake/staged/steam/stats_fact/2022/02/04/2022-02-04T10_28_36Z_to_2022-02-04T11_28_36Z.csv',
-       'us-east-1'
+       '{bucket}',
+       '{bucket_key}',
+       '{region}'
     );
     
-    INSERT INTO rust_data_warehouse."Stats_Fact"(stats_sk, player_sk, game_sk, date_sk, value)
+    INSERT INTO {schema}."Stats_Fact"(stats_sk, player_sk, game_sk, date_sk, value)
     SELECT stats_sk, player_sk, game_sk, date_sk, value FROM temp_fact as tf
-       INNER JOIN rust_data_warehouse."Player_Dim" as pd
+       INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id 
-       INNER JOIN rust_data_warehouse."Game_Dim" as gd
+       INNER JOIN {schema}."Game_Dim" as gd
         ON tf.game = gd.name
-       INNER JOIN rust_data_warehouse."Stats_Dim" as sd
+       INNER JOIN {schema}."Stats_Dim" as sd
         ON tf.name = sd.name
-       INNER JOIN rust_data_warehouse."Date_Dim" as dd
+       INNER JOIN {schema}."Date_Dim" as dd
         ON DATE(tf.date) = dd.full_date;
     """

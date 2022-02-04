@@ -3,6 +3,7 @@ from airflow.operators.python import PythonOperator
 from airflow.models import DAG
 from custom_operators.SteamToS3Operator import SteamToS3Operator
 from custom_operators.LoadDimsOperator import LoadDimsOperator
+from custom_operators.LoadFactsOperator import LoadFactsOperator
 from airflow.providers.amazon.aws.sensors.s3_key import S3KeySensor
 from airflow.utils.task_group import TaskGroup
 from airflow.operators.dummy import DummyOperator
@@ -13,16 +14,16 @@ from scripts.rust_twitter_steam_dims import transform_achievement_dim, transform
 from scripts.rust_twitter_steam_facts import transform_stats_fact, transform_game_playing_banned_fact, \
     transform_groups_fact, transform_game_playtime_fact, transform_bans_fact, transform_badges_fact, \
     transform_friends_fact, transform_achievement_fact
+from scripts.sql_queries import sql_queries
 
 default_args = {
     "owner": "airflow",
-    "start_date": datetime(2022, 1, 27),
+    "start_date": datetime(2022, 2, 3),
     "retries": 1,
     "max_retry_delay": timedelta(minutes=5)
 }
 
-with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), catchup=False, default_args=default_args,
-         max_active_runs=1) as dag:
+with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), catchup=True, default_args=default_args, max_active_runs=1) as dag:
     extract_twitter_timeline_data = PythonOperator(
         task_id="extract_twitter_timeline_data",
         python_callable=get_twitter_timeline,
@@ -36,15 +37,6 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
             "bucket_key": "data-lake/raw/twitter/timeline/",
             "BEARER_TOKEN": "{{ var.value.TWITTER_BEARER_TOKEN }}"
         }
-    )
-
-    timeline_data_exists_branch = BranchPythonOperator(
-        task_id='timeline_data_exists_branch',
-        python_callable=check_timeline_data_exists
-    )
-
-    no_accounts_exists_dummy_op = DummyOperator(
-        task_id="no_timeline_data_exists"
     )
 
     twitter_data_file_sensor = S3KeySensor(
@@ -730,17 +722,17 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
             timeout=90,
             soft_fail=True
         )
-        badges_fact_f_sensor = S3KeySensor(
+        bans_fact_f_sensor = S3KeySensor(
             aws_conn_id="s3",
-            task_id="badges_fact_f_sensor",
-            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='') }}",
+            task_id="bans_fact_f_sensor",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_bans_facts') }}",
             bucket_name="rust-cheaters",
             timeout=90,
             soft_fail=True
         )
-        bans_fact_f_sensor = S3KeySensor(
+        badges_fact_f_sensor = S3KeySensor(
             aws_conn_id="s3",
-            task_id="bans_fact_f_sensor",
+            task_id="badges_fact_f_sensor",
             bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_badges_facts') }}",
             bucket_name="rust-cheaters",
             timeout=90,
@@ -787,20 +779,104 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
             soft_fail=True
         )
 
-        # # DIMS TO POSTGRESQL
-        # load_achievements_dim = LoadDimsOperator(
-        #     task_id="load_achievements_dim",
-        #     postgres_conn_id="aws_postgres",
-        #     database="data_warehouse",
-        #     schema="rust_data_warehouse",
-        #     table="Achievements_Dim",
-        #     columns="name, description",
-        #     bucket="rust-cheaters",
-        #     bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_achievements_dim') }}",
-        #     region="us-east-1",
-        #     conflict_columns="name",
-        #     conflict_action="NOTHING"
-        # )
+        # FACTS TO POSTGRESQL
+        load_achievement_fact = LoadFactsOperator(
+            task_id="load_achievement_fact",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_achievements_fact') }}",
+            region="us-east-1",
+            sql=sql_queries.achievement_fact_insert
+        )
+
+        load_friends_fact = LoadFactsOperator(
+            task_id="load_friends_fact",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_friends_fact') }}",
+            region="us-east-1",
+            sql=sql_queries.friends_fact_insert
+        )
+
+        load_badges_fact = LoadFactsOperator(
+            task_id="load_badges_fact",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_badges_facts') }}",
+            region="us-east-1",
+            sql=sql_queries.badges_fact_insert
+        )
+
+        load_game_playtime_fact = LoadFactsOperator(
+            task_id="load_game_playtime_fact",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_game_playtime_fact') }}",
+            region="us-east-1",
+            sql=sql_queries.game_playtime_fact_insert
+        )
+
+        load_group_fact = LoadFactsOperator(
+            task_id="load_group_fact",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_groups_fact') }}",
+            region="us-east-1",
+            sql=sql_queries.group_fact_insert
+        )
+
+        load_game_playing_banned_fact = LoadFactsOperator(
+            task_id="load_game_playing_banned_fact",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_game_playing_banned_fact') }}",
+            region="us-east-1",
+            sql=sql_queries.game_playing_banned_fact_insert
+        )
+
+        load_stats_fact = LoadFactsOperator(
+            task_id="load_stats_fact",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_stats_fact') }}",
+            region="us-east-1",
+            sql=sql_queries.stats_fact_insert
+        )
+
+        load_bans_fact = LoadFactsOperator(
+            task_id="load_bans_fact",
+            postgres_conn_id="aws_postgres",
+            database="data_warehouse",
+            schema="rust_data_warehouse",
+            bucket="rust-cheaters",
+            bucket_key="{{ ti.xcom_pull(key='s3_bucket_key', task_ids='transform_steam_data.stage_bans_facts') }}",
+            region="us-east-1",
+            sql=sql_queries.bans_fact_insert
+        )
+
+        friends_fact_f_sensor >> load_friends_fact
+        bans_fact_f_sensor >> load_bans_fact
+        game_playtime_fact_f_sensor >> load_game_playtime_fact
+        groups_fact_f_sensor >> load_group_fact
+        achievement_fact_f_sensor >> load_achievement_fact
+        game_playing_banned_fact_f_sensor >> load_game_playing_banned_fact
+        stats_fact_f_sensor >> load_stats_fact
+        badges_fact_f_sensor >> load_badges_fact
+
 
     begin = DummyOperator(
         task_id="begin"
@@ -811,7 +887,5 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
         trigger_rule="none_failed_min_one_success"
     )
 
-    begin >> extract_twitter_timeline_data >> timeline_data_exists_branch >> [no_accounts_exists_dummy_op,
-                                                                              twitter_data_file_sensor]
-    twitter_data_file_sensor >> extract_steam_data >> transform_steam_data >> load_dims_steam_data >> load_facts_steam_data >> end
-    no_accounts_exists_dummy_op >> end
+    begin >> extract_twitter_timeline_data >> twitter_data_file_sensor >> extract_steam_data >> \
+    transform_steam_data >> load_dims_steam_data >> load_facts_steam_data >> end
