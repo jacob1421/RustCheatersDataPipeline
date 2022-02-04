@@ -31,7 +31,7 @@ class FactSql:
         ON DATE(tf.unlock_ts) = dd.full_date;
     """
 
-    badges_insert_sql = """
+    badges_fact_insert = """
     --Create temp table for staged data
     CREATE TEMPORARY TABLE temp_fact (
         steam_id bigint, 
@@ -64,4 +64,185 @@ class FactSql:
         ON tf.steam_id = pd.steam_id 
      INNER JOIN rust_data_warehouse."Date_Dim" as dd
         ON DATE(tf.completion_time) = dd.full_date;
+    """
+
+    bans_fact_insert = """
+    --Create temp table for staged data
+    CREATE TEMPORARY TABLE temp_fact (
+        steam_id bigint, 
+        last_ban_date timestamp with time zone, 
+        num_vac_bans bigint, 
+        num_game_bans bigint, 
+        community_banned boolean,
+        economy_ban text,
+        vac_banned boolean
+    )ON COMMIT DROP;
+    
+    --Copy data from S3 Bucket to Database
+    select aws_s3.table_import_from_s3 (
+       'temp_fact',
+       'steam_id, last_ban_date, num_vac_bans, num_game_bans, community_banned, economy_ban, vac_banned',
+       '(FORMAT CSV, HEADER)',
+       'rust-cheaters',
+       'data-lake/staged/steam/bans_fact/2022/02/04/2022-02-04T09_49_55Z_to_2022-02-04T10_49_55Z.csv',
+       'us-east-1'
+    );
+    
+    INSERT INTO rust_data_warehouse."Bans_Fact"(player_sk, date_sk, num_vac_bans, num_game_bans, community_banned, economy_ban, vac_banned)
+    SELECT player_sk, date_sk, num_vac_bans, num_game_bans, community_banned, economy_ban, vac_banned FROM temp_fact as tf
+      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+        ON tf.steam_id = pd.steam_id 
+      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+        ON DATE(tf.last_ban_date) = dd.full_date;
+    """
+
+    friends_fact_insert = """
+    --Create temp table for staged data
+    CREATE TEMPORARY TABLE temp_fact (
+        steam_id bigint,
+        friend_steam_id bigint,
+        friend_since timestamp with time zone, 
+        relationship text
+    )ON COMMIT DROP;
+    
+    --Copy data from S3 Bucket to Database
+    select aws_s3.table_import_from_s3 (
+       'temp_fact',
+       'steam_id, friend_steam_id, friend_since, relationship',
+       '(FORMAT CSV, HEADER)',
+       'rust-cheaters',
+       'data-lake/staged/steam/friends_fact/2022/02/04/2022-02-04T09_49_55Z_to_2022-02-04T10_49_55Z.csv',
+       'us-east-1'
+    );
+    
+    INSERT INTO rust_data_warehouse."Friends_Fact"(player_sk, player_friend_sk, date_sk, relationship_sk, time)
+    SELECT player_sk, friend_sk, date_sk, relationship_sk, tf.friend_since::time WITH TIME ZONE as time FROM temp_fact as tf
+      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+        ON tf.steam_id = pd.steam_id 
+      INNER JOIN rust_data_warehouse."Friend_Dim" as fd
+        ON tf.friend_steam_id = fd.steam_id 
+      INNER JOIN rust_data_warehouse."Relationship_Dim" as rr
+        ON tf.relationship = rr.relationship
+      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+        ON DATE(tf.friend_since) = dd.full_date;
+    """
+
+    game_playing_banned_fact_insert = """
+    --Create temp table for staged data
+    CREATE TEMPORARY TABLE temp_fact (
+        steam_id bigint,
+        game_id bigint,
+        date timestamp with time zone
+    )ON COMMIT DROP;
+    
+    --Copy data from S3 Bucket to Database
+    select aws_s3.table_import_from_s3 (
+       'temp_fact',
+       'steam_id, game_id, date',
+       '(FORMAT CSV, HEADER)',
+       'rust-cheaters',
+       'data-lake/staged/steam/game_playing_banned_fact/2022/02/04/2022-02-04T09_43_38Z_to_2022-02-04T10_43_38Z.csv',
+       'us-east-1'
+    );
+    
+    INSERT INTO rust_data_warehouse."Game_Playing_Banned_Fact"(player_sk, game_sk, date_sk)
+    SELECT player_sk, game_sk, date_sk FROM temp_fact as tf
+      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+        ON tf.steam_id = pd.steam_id 
+      INNER JOIN rust_data_warehouse."Game_Dim" as gd
+        ON tf.game_id = gd.game_id 
+      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+        ON DATE(tf.date) = dd.full_date;
+    """
+
+    game_playtime_fact_insert = """
+    --Create temp table for staged data
+    CREATE TEMPORARY TABLE temp_fact (
+        steam_id bigint,
+        game_id bigint,
+        date timestamp with time zone, 
+        playtime_windows_mins bigint, 
+        playtime_mac_mins bigint, 
+        playtime_linux_mins bigint, 
+        playtime_two_weeks_mins bigint
+    )ON COMMIT DROP;
+    
+    --Copy data from S3 Bucket to Database
+    select aws_s3.table_import_from_s3 (
+       'temp_fact',
+       'steam_id, game_id, date, playtime_windows_mins, playtime_mac_mins, playtime_linux_mins, playtime_two_weeks_mins',
+       '(FORMAT CSV, HEADER)',
+       'rust-cheaters',
+       'data-lake/staged/steam/game_playtime_fact/2022/02/04/2022-02-04T10_28_36Z_to_2022-02-04T11_28_36Z.csv',
+       'us-east-1'
+    );
+    
+    INSERT INTO rust_data_warehouse."Game_Playtime_Fact"(player_sk, game_sk, date_sk, playtime_windows_mins, playtime_mac_mins, playtime_linux_mins, playtime_two_weeks)
+    SELECT player_sk, game_sk, date_sk, playtime_windows_mins, playtime_mac_mins, playtime_linux_mins, playtime_two_weeks_mins FROM temp_fact as tf
+      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+        ON tf.steam_id = pd.steam_id 
+      INNER JOIN rust_data_warehouse."Game_Dim" as gd
+        ON tf.game_id = gd.game_id 
+      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+        ON DATE(tf.date) = dd.full_date;
+    """
+
+    group_fact_insert = """
+    --Create temp table for staged data
+    CREATE TEMPORARY TABLE temp_fact (
+        steam_id bigint,
+        group_id bigint,
+        date timestamp with time zone
+    )ON COMMIT DROP;
+    
+    --Copy data from S3 Bucket to Database
+    select aws_s3.table_import_from_s3 (
+       'temp_fact',
+       'steam_id, group_id, date',
+       '(FORMAT CSV, HEADER)',
+       'rust-cheaters',
+       'data-lake/staged/steam/groups_fact/2022/02/04/2022-02-04T10_28_36Z_to_2022-02-04T11_28_36Z.csv',
+       'us-east-1'
+    );
+    
+    INSERT INTO rust_data_warehouse."Groups_Fact"(player_sk, group_sk, date_sk)
+    SELECT player_sk, group_sk, date_sk FROM temp_fact as tf
+      INNER JOIN rust_data_warehouse."Player_Dim" as pd
+        ON tf.steam_id = pd.steam_id 
+      INNER JOIN rust_data_warehouse."Group_Dim" as gd
+        ON tf.group_id = gd.group_id
+      INNER JOIN rust_data_warehouse."Date_Dim" as dd
+        ON DATE(tf.date) = dd.full_date;
+    """
+
+    stats_fact_insert = """
+    --Create temp table for staged data
+    CREATE TEMPORARY TABLE temp_fact (
+        name text, 
+        steam_id bigint, 
+        game text, 
+        date timestamp with time zone, 
+        value real
+    )ON COMMIT DROP;
+    
+    --Copy data from S3 Bucket to Database
+    select aws_s3.table_import_from_s3 (
+       'temp_fact',
+       'name, steam_id, game, date, value',
+       '(FORMAT CSV, HEADER)',
+       'rust-cheaters',
+       'data-lake/staged/steam/stats_fact/2022/02/04/2022-02-04T10_28_36Z_to_2022-02-04T11_28_36Z.csv',
+       'us-east-1'
+    );
+    
+    INSERT INTO rust_data_warehouse."Stats_Fact"(stats_sk, player_sk, game_sk, date_sk, value)
+    SELECT stats_sk, player_sk, game_sk, date_sk, value FROM temp_fact as tf
+       INNER JOIN rust_data_warehouse."Player_Dim" as pd
+        ON tf.steam_id = pd.steam_id 
+       INNER JOIN rust_data_warehouse."Game_Dim" as gd
+        ON tf.game = gd.name
+       INNER JOIN rust_data_warehouse."Stats_Dim" as sd
+        ON tf.name = sd.name
+       INNER JOIN rust_data_warehouse."Date_Dim" as dd
+        ON DATE(tf.date) = dd.full_date;
     """

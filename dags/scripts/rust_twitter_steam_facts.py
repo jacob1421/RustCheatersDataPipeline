@@ -100,6 +100,16 @@ def transform_game_playtime_fact(**kwargs):
         "playtime_2weeks": "playtime_two_weeks_mins"
     })
 
+    # Correct datatypes for columns
+    df = df.astype({
+        "steam_id": "Int64",
+        "game_id": "Int64",
+        "playtime_windows_mins": "Int64",
+        "playtime_mac_mins": "Int64",
+        "playtime_linux_mins": "Int64",
+        "playtime_two_weeks_mins": "Int64",
+    }, errors="ignore")
+
     #Todays Date
     df["date"] = kwargs["data_interval_end"].strftime("%Y-%m-%dT%H:%M:%SZ")
 
