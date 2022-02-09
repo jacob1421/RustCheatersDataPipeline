@@ -39,8 +39,9 @@ Lastly, staging S3 bucket dim and fact data is loaded with Custom Airflow Operat
 1.) Why not uses Spark?
 The data that is processed every hour is between 1-5MB.
 
-3.) Why stage the Fact and Dim tables pre load?
+2.) Why stage the Fact and Dim tables pre load?
 Easier to debug the pipeline in event that the pipeline fails.
 
-
-
+## Acknowledgement
+Emily(mod#1073) from [Data Engineering Discord](https://invite.gg/dataengineering)
+   -Answered questions I had about my initial data warehouse architecture. Emily was very helpful in my adventure to building a data warehouse!
