@@ -35,8 +35,8 @@ def get_twitter_timeline(**kwargs):
                 }
             )
 
-    if kwargs["log_response"]:
-        print("DATA: %s\n" % (steam_profile_urls))
+    # if kwargs["log_response"]:
+    #     print("DATA: %s\n" % (steam_profile_urls))
 
     if len(steam_profile_urls["steam_profile_urls"]) > 0:
         file_name = ("%s_to_%s" % (kwargs["data_interval_start"].strftime("%Y-%m-%dT%H_%M_%SZ"),
@@ -52,8 +52,8 @@ def get_twitter_timeline(**kwargs):
         )
         # Push s3 key
         kwargs["ti"].xcom_push(key="s3_bucket_key", value=s3_bucket_key)
-        if kwargs["log_response"]:
-            print("SAVED DATA TO BUCKET:%s\nSAVED DATA TO KEY: %s\n" % (kwargs["bucket_name"], s3_bucket_key))
+        # if kwargs["log_response"]:
+        #     print("SAVED DATA TO BUCKET:%s\nSAVED DATA TO KEY: %s\n" % (kwargs["bucket_name"], s3_bucket_key))
     else:
         kwargs["ti"].xcom_push(key="s3_bucket_key", value="no_timeline_data")
 
