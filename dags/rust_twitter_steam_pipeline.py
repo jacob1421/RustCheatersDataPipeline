@@ -30,7 +30,7 @@ with DAG("rust_twitter_steam_pipeline", schedule_interval=timedelta(hours=1), ca
             "bucket_name": BUCKET_NAME
         },
         templates_dict={
-            "bucket_key": "data-lake/raw/twitter/timeline/",
+            "bucket_key": f"{LANDING_RAW}twitter/timeline/",
             "BEARER_TOKEN": "{{ var.value.TWITTER_BEARER_TOKEN }}"
         }
     )
