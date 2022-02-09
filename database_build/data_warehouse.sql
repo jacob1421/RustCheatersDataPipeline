@@ -70,6 +70,15 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Date_Dim"
     CONSTRAINT "Date_Dim_pkey" PRIMARY KEY (date_sk)
 );
 
+--Insert date dims
+INSERT INTO rust_data_warehouse."Date_Dim" (full_date, day, month, year, week_day)
+SELECT t.day::date as full_date,
+extract(day from t.day::date) as day,
+extract(month from t.day::date) as month,
+extract(year from t.day::date) as year,
+To_Char(t.day::date, 'Day') as week_day  FROM
+generate_series(timestamp '2000-01-01' , timestamp '2050-01-01' , interval '1 day') AS t(day);
+
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Friend_Dim"
 (
     friend_sk integer NOT NULL DEFAULT nextval('"Friend_Dim_friend_sk_seq"'::regclass),
