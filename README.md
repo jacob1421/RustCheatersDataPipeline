@@ -35,6 +35,50 @@ Lastly, staging S3 bucket dim and fact data is loaded with Custom Airflow Operat
 ## [Data Studio Dashboard](https://datastudio.google.com/u/0/reporting/85aa118b-9def-48e4-8c88-b3db1e34e3ff/page/Ic8kC)
 ![Data Studio Dashboard](https://github.com/jacob1421/RustCheatersDataPipeline/blob/master/images/Dashboard.gif)
 
+## Data Insights 
+1. The US has the most accounts banned for cheating with Russia trailing behind.
+
+2. Most cheaters have a level 1 steam account.
+
+3. The top 3 cheater names
+
+    -123
+
+    -NeOn
+
+    -xd
+
+4. The most common profile picture is the default steam profile picture.
+
+5. The majority of cheaters get banned between 0 and 10 hours.
+
+6. The top 3 games that cheaters own
+
+   - Counter-Strike: Global Offensive
+
+   - PUBG: BATTLEGROUNDS
+
+   - Apex Legends.
+
+7. Top 3 Steam Groups
+
+   - Rustoria
+
+   - Andysolam
+
+   - Payday
+
+8. Cheaters use Archi's SC Farm to boost their accounts. It's a cheater's attempt to make their account look more legitimate to normal players.
+
+9. Profile Visibility - A lot of people believe if a profile is private it's a cheater. More cheaters have public profiles than private profiles.
+
+   - Friends of Friends - 2,565
+
+   - Private - 824
+
+   - Friends Only - 133
+  
+
 ## Reflect
 1.) Why not uses Spark?
 The data that is processed every hour is between 1-5MB.
