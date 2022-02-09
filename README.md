@@ -32,8 +32,8 @@ Lastly, staging S3 bucket dim and fact data is loaded with Custom Airflow Operat
 ## Data Warehouse
 ![Data Warehouse Arcitecture](https://github.com/jacob1421/RustCheatersDataPipeline/blob/master/images/DataWarehouse.png)
 
-## Dashboard
-![Dashboard](https://github.com/jacob1421/RustCheatersDataPipeline/blob/master/images/Dashboard.gif)
+## [Data Studio Dashboard](https://datastudio.google.com/u/0/reporting/85aa118b-9def-48e4-8c88-b3db1e34e3ff/page/Ic8kC)
+![Data Studio Dashboard](https://github.com/jacob1421/RustCheatersDataPipeline/blob/master/images/Dashboard.gif)
 
 ## Reflect
 1.) Why not uses Spark?
