@@ -219,7 +219,7 @@ class sql_queries:
        '{bucket_key}',
        '{region}'
     );
-    INSERT INTO {schema}."Stats_Fact"(stats_sk, player_sk, game_sk, date_sk, value) # noqa
+    INSERT INTO {schema}."Stats_Fact"(stats_sk, player_sk, game_sk, date_sk, value)
     SELECT stats_sk, player_sk, game_sk, date_sk, value FROM temp_fact as tf
        INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id
