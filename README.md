@@ -1,4 +1,5 @@
 # Rust Cheaters Data Pipeline
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 <img src="https://github.com/jacob1421/RustCheatersDataPipeline/blob/master/images/rust.jpg" style="width: 100%;height:400px;" align="centre">
 
