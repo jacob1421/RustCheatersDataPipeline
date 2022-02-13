@@ -26,7 +26,9 @@ class sql_queries:
     INNER JOIN {schema}."Game_Dim" as gd
         ON tf.game_name = gd.name
     INNER JOIN {schema}."Date_Dim" as dd
-        ON DATE(tf.unlock_ts) = dd.full_date;
+        ON DATE(tf.unlock_ts) = dd.full_date
+    ON CONFLICT(player_sk, achievement_sk, game_sk, date_sk)
+    DO NOTHING;
     """
 
     badges_fact_insert = """
@@ -59,7 +61,9 @@ class sql_queries:
      INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id
      INNER JOIN {schema}."Date_Dim" as dd
-        ON DATE(tf.completion_time) = dd.full_date;
+        ON DATE(tf.completion_time) = dd.full_date
+    ON CONFLICT(player_sk, badge_sk, date_sk)
+    DO NOTHING;
     """
 
     bans_fact_insert = """
@@ -87,7 +91,14 @@ class sql_queries:
       INNER JOIN {schema}."Player_Dim" as pd
         ON tf.steam_id = pd.steam_id
       INNER JOIN {schema}."Date_Dim" as dd
-        ON DATE(tf.last_ban_date) = dd.full_date;
+        ON DATE(tf.last_ban_date) = dd.full_date
+    ON CONFLICT(player_sk)
+    DO UPDATE 
+    SET num_vac_bans = EXCLUDED.num_vac_bans, 
+    num_game_bans = EXCLUDED.num_game_bans, 
+    community_banned = EXCLUDED.community_banned, 
+    economy_ban = EXCLUDED.economy_ban, 
+    vac_banned = EXCLUDED.vac_banned;
     """
 
     friends_fact_insert = """
@@ -116,7 +127,9 @@ class sql_queries:
       INNER JOIN {schema}."Relationship_Dim" as rr
         ON tf.relationship = rr.relationship
       INNER JOIN {schema}."Date_Dim" as dd
-        ON DATE(tf.friend_since) = dd.full_date;
+        ON DATE(tf.friend_since) = dd.full_date
+    ON CONFLICT(player_sk, player_friend_sk, date_sk, relationship_sk)
+    DO NOTHING;
     """
 
     game_playing_banned_fact_insert = """
@@ -142,7 +155,9 @@ class sql_queries:
       INNER JOIN {schema}."Game_Dim" as gd
         ON tf.game_id = gd.game_id
       INNER JOIN {schema}."Date_Dim" as dd
-        ON DATE(tf.date) = dd.full_date;
+        ON DATE(tf.date) = dd.full_date
+    ON CONFLICT(player_sk, game_sk)
+    DO NOTHING;
     """
 
     game_playtime_fact_insert = """
@@ -172,7 +187,13 @@ class sql_queries:
       INNER JOIN {schema}."Game_Dim" as gd
         ON tf.game_id = gd.game_id
       INNER JOIN {schema}."Date_Dim" as dd
-        ON DATE(tf.date) = dd.full_date;
+        ON DATE(tf.date) = dd.full_date
+    ON CONFLICT(player_sk, game_sk)
+    DO UPDATE SET 
+    playtime_windows_mins = EXCLUDED.playtime_windows_mins, 
+    playtime_mac_mins = EXCLUDED.playtime_mac_mins, 
+    playtime_linux_mins = EXCLUDED.playtime_linux_mins, 
+    playtime_two_weeks = EXCLUDED.playtime_two_weeks;
     """
 
     group_fact_insert = """
@@ -198,7 +219,9 @@ class sql_queries:
       INNER JOIN {schema}."Group_Dim" as gd
         ON tf.group_id = gd.group_id
       INNER JOIN {schema}."Date_Dim" as dd
-        ON DATE(tf.date) = dd.full_date;
+        ON DATE(tf.date) = dd.full_date
+    ON CONFLICT(player_sk, group_sk)
+    DO NOTHING;
     """
 
     stats_fact_insert = """
@@ -228,5 +251,9 @@ class sql_queries:
        INNER JOIN {schema}."Stats_Dim" as sd
         ON tf.name = sd.name
        INNER JOIN {schema}."Date_Dim" as dd
-        ON DATE(tf.date) = dd.full_date;
+        ON DATE(tf.date) = dd.full_date
+    ON CONFLICT(stats_sk, player_sk, game_sk)
+    DO UPDATE 
+    SET value = EXCLUDED.value, 
+    date_sk = EXCLUDED.date_sk;
     """

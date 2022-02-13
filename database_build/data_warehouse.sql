@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Achievement_Fact"
     achievement_sk integer NOT NULL,
     game_sk integer NOT NULL,
     date_sk integer NOT NULL,
-    "time" time with time zone NOT NULL
+    "time" time with time zone NOT NULL,
+    CONSTRAINT "Achievement_Fact_pkey" PRIMARY KEY (player_sk, achievement_sk, game_sk, date_sk)
 );
 
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Achievements_Dim"
@@ -45,7 +46,8 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Badges_Fact"
     date_sk integer NOT NULL,
     scarcity integer NOT NULL,
     steam_level integer NOT NULL DEFAULT 0,
-    "time" time with time zone NOT NULL
+    "time" time with time zone NOT NULL,
+    CONSTRAINT "Badges_Fact_pkey" PRIMARY KEY (player_sk, badge_sk, date_sk)
 );
 
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Bans_Fact"
@@ -56,7 +58,8 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Bans_Fact"
     num_game_bans integer NOT NULL DEFAULT 0,
     community_banned boolean NOT NULL,
     economy_ban text COLLATE pg_catalog."default" NOT NULL,
-    vac_banned boolean NOT NULL
+    vac_banned boolean NOT NULL,
+    CONSTRAINT "Bans_Fact_pkey" PRIMARY KEY (player_sk)
 );
 
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Date_Dim"
@@ -69,15 +72,6 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Date_Dim"
     week_day text COLLATE pg_catalog."default" NOT NULL,
     CONSTRAINT "Date_Dim_pkey" PRIMARY KEY (date_sk)
 );
-
---Insert date dims
-INSERT INTO rust_data_warehouse."Date_Dim" (full_date, day, month, year, week_day)
-SELECT t.day::date as full_date,
-extract(day from t.day::date) as day,
-extract(month from t.day::date) as month,
-extract(year from t.day::date) as year,
-To_Char(t.day::date, 'Day') as week_day  FROM
-generate_series(timestamp '2000-01-01' , timestamp '2050-01-01' , interval '1 day') AS t(day);
 
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Friend_Dim"
 (
@@ -92,7 +86,8 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Friends_Fact"
     player_friend_sk integer NOT NULL,
     date_sk integer NOT NULL,
     relationship_sk integer NOT NULL,
-    "time" time with time zone NOT NULL
+    "time" time with time zone NOT NULL,
+    CONSTRAINT "Friends_Fact_pkey" PRIMARY KEY (player_sk, player_friend_sk, date_sk, relationship_sk)
 );
 
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Game_Dim"
@@ -108,7 +103,8 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Game_Playing_Banned_Fact"
 (
     player_sk integer NOT NULL,
     game_sk integer NOT NULL,
-    date_sk integer NOT NULL
+    date_sk integer NOT NULL,
+    CONSTRAINT "Game_Playing_Banned_Fact_pkey" PRIMARY KEY (player_sk, game_sk)
 );
 
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Game_Playtime_Fact"
@@ -119,7 +115,8 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Game_Playtime_Fact"
     playtime_windows_mins bigint NOT NULL DEFAULT 0,
     playtime_mac_mins bigint NOT NULL DEFAULT 0,
     playtime_linux_mins bigint NOT NULL DEFAULT 0,
-    playtime_two_weeks bigint NOT NULL DEFAULT 0
+    playtime_two_weeks bigint NOT NULL DEFAULT 0,
+    CONSTRAINT "Game_Playtime_Fact_pkey" PRIMARY KEY (player_sk, game_sk)
 );
 
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Group_Dim"
@@ -133,7 +130,8 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Groups_Fact"
 (
     player_sk integer NOT NULL,
     group_sk integer NOT NULL,
-    date_sk integer NOT NULL
+    date_sk integer NOT NULL,
+    CONSTRAINT "Groups_Fact_pkey" PRIMARY KEY (player_sk, group_sk)
 );
 
 CREATE TABLE IF NOT EXISTS rust_data_warehouse."Player_Dim"
@@ -175,10 +173,10 @@ CREATE TABLE IF NOT EXISTS rust_data_warehouse."Stats_Fact"
     player_sk integer NOT NULL,
     game_sk integer NOT NULL,
     date_sk integer NOT NULL,
-    value real NOT NULL
+    value real NOT NULL,
+    CONSTRAINT "Stats_Fact_pkey" PRIMARY KEY (stats_sk, player_sk, game_sk)
 );
 
---Create Foreign Constraints
 ALTER TABLE IF EXISTS rust_data_warehouse."Achievement_Fact"
     ADD CONSTRAINT "fk_Player_Owned_Games_Fact_Achievement_Dim1" FOREIGN KEY (achievement_sk)
     REFERENCES rust_data_warehouse."Achievements_Dim" (achievement_sk) MATCH SIMPLE
@@ -249,6 +247,8 @@ ALTER TABLE IF EXISTS rust_data_warehouse."Bans_Fact"
     ON UPDATE NO ACTION
     ON DELETE NO ACTION
     NOT VALID;
+CREATE INDEX IF NOT EXISTS "Bans_Fact_pkey"
+    ON rust_data_warehouse."Bans_Fact"(player_sk);
 
 
 ALTER TABLE IF EXISTS rust_data_warehouse."Friends_Fact"
@@ -383,34 +383,6 @@ ALTER TABLE IF EXISTS rust_data_warehouse."Stats_Fact"
     ON DELETE NO ACTION
     NOT VALID;
 
-
---Create Unique Constraints
-ALTER TABLE ONLY rust_data_warehouse."Achievements_Dim"
-    ADD CONSTRAINT achieve_name_uniq UNIQUE (name);
-
-ALTER TABLE ONLY rust_data_warehouse."Badges_Dim"
-    ADD CONSTRAINT badges_unique UNIQUE (badge_id, app_id, community_item_id, level);
-
-ALTER TABLE ONLY rust_data_warehouse."Date_Dim"
-    ADD CONSTRAINT date_unique UNIQUE (full_date, day, month, year, week_day);
-
-ALTER TABLE ONLY rust_data_warehouse."Friend_Dim"
-    ADD CONSTRAINT friend_unique UNIQUE (steam_id);
-
-ALTER TABLE ONLY rust_data_warehouse."Game_Dim"
-    ADD CONSTRAINT game_unique UNIQUE (game_id);
-
-ALTER TABLE ONLY rust_data_warehouse."Group_Dim"
-    ADD CONSTRAINT group_uni UNIQUE (group_id);
-
-ALTER TABLE ONLY rust_data_warehouse."Player_Dim"
-    ADD CONSTRAINT player_unique UNIQUE (steam_id);
-
-ALTER TABLE ONLY rust_data_warehouse."Relationship_Dim"
-    ADD CONSTRAINT relationship_unique UNIQUE (relationship);
-
-ALTER TABLE ONLY rust_data_warehouse."Stats_Dim"
-    ADD CONSTRAINT stat_unique UNIQUE (name);
-
+END;
 
 END;
